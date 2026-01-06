@@ -24,10 +24,10 @@ object SwipeableCardsDefaults {
     val STACKED_CARDS_OFFSET = 0.dp
 
     /** Horizontal distance required to trigger a page flip. */
-    val SWIPE_THRESHOLD = 80.dp
+    val SWIPE_THRESHOLD = 200.dp
 
     /** Padding around the card stack container. */
-    val PADDING = 10.dp
+    val PADDING = 0.dp
 }
 
 /**

@@ -55,8 +55,5 @@ internal fun Modifier.pageCurlOrFallback(
     this.drawPageCurl(config, dragStart, dragCurrent)
 } else {
     // Fallback to simple offset for older devices
-    this.graphicsLayer {
-        translationX = fallbackOffset.x
-        translationY = fallbackOffset.y
-    }
+    this
 }

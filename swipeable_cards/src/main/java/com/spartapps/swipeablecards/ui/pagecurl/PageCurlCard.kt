@@ -1,5 +1,6 @@
 package com.spartapps.swipeablecards.ui.pagecurl
 
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
@@ -133,14 +134,17 @@ internal fun PageCurlCard(
 
                                 when {
                                     draggedLeft -> {
+                                        Log.e("PageCurlCard", "Swiped left")
                                         pendingDirection = SwipeDirection.Left
                                         curlState = CurlState.Completing
                                     }
                                     draggedRight -> {
+                                        Log.e("PageCurlCard", "Swiped RIGHT")
                                         pendingDirection = SwipeDirection.Right
                                         curlState = CurlState.Completing
                                     }
                                     else -> {
+                                        Log.e("PageCurlCard", "Swiped RESETTING")
                                         curlState = CurlState.Resetting
                                     }
                                 }
