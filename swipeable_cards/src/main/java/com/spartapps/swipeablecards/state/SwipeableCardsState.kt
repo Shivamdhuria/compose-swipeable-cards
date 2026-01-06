@@ -368,10 +368,10 @@ class SwipeableCardsState(
             CurlState.Completing -> {
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
-                        // Animate to fully curled (left edge)
+                        // Animate to fully curled (left edge) and beyond to create off-screen effect
                         dragCurrentAnimatable.animateTo(
-                            targetValue = Offset(0f, dragCurrentAnimatable.value.y),
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                            targetValue = Offset(-containerWidth * 0.15f, dragCurrentAnimatable.value.y),
+                            animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
                         ) {
                             curlDragCurrent = this.value
                         }
