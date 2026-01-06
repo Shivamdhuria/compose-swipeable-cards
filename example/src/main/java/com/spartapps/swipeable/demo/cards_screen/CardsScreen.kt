@@ -52,11 +52,10 @@ fun CardsScreen(
                 Log.d("CardsScreen", "onSwipe: $item, $direction")
             },
         ) {
-            items(data) { item, index, offset ->
+            items(data) { item, index ->
                 CardItem(
                     index = index,
                     cardData = item,
-                    offset = offset
                 )
             }
         }

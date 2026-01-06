@@ -20,32 +20,34 @@ import com.spartapps.swipeablecards.state.SwipeableCardsState
 import com.spartapps.swipeablecards.ui.SwipeableCardDirection
 import com.spartapps.swipeablecards.ui.SwipeableCardsFactors
 import com.spartapps.swipeablecards.ui.SwipeableCardsProperties
-import com.spartapps.swipeablecards.ui.animation.SwipeableCardsAnimations
 import kotlinx.coroutines.launch
 
 /**
- * A composable function that displays a stack of swipeable cards using a lazy approach.
- * The cards are animated and can be swiped in different directions.
+ * A composable that displays a stack of cards with page curl flip effect.
  *
- * @param T The type of the data backing the cards.
- * @param modifier The modifier to be applied to the layout.
- * @param state The state of the swipeable cards, which controls the current index and interactions.
- * @param properties Configuration properties for the swipeable cards (e.g., padding, stack behavior).
- * @param animations Animation specifications for swipe transitions.
- * @param factors Calculation factors that determine card positions and offsets.
- * @param onSwipe A callback that is triggered when a card is swiped. Provides the swiped item and direction.
- * @param content A lambda that defines the content of the lazy swipeable cards.
+ * Cards can be swiped left or right to flip through them like pages in a book.
+ * Uses lazy composition for efficient rendering of large datasets.
  *
- * Example usage:
+ * @param T The type of data backing the cards
+ * @param modifier Modifier for the card stack container
+ * @param state State holder controlling current card index and navigation
+ * @param properties Configuration for thresholds, padding, and curl effect
+ * @param factors Calculation factors for card positioning and scaling
+ * @param onSwipe Callback when a card is swiped. Receives the item and swipe direction.
+ * @param content DSL scope for defining card items
+ *
+ * Example:
  * ```
+ * val state = rememberSwipeableCardsState()
+ *
  * LazySwipeableCards(
- *     state = rememberSwipeableCardsState(),
- *     onSwipe = { profile: Profile, direction ->
- *         // Handle swipe
+ *     state = state,
+ *     onSwipe = { item, direction ->
+ *         println("Swiped ${item.name} to $direction")
  *     }
  * ) {
- *     items(profileList) { profile ->
- *         ProfileCard(profile)
+ *     items(myItems) { item, index ->
+ *         Card { Text(item.name) }
  *     }
  * }
  * ```
@@ -56,15 +58,13 @@ fun <T> LazySwipeableCards(
     modifier: Modifier = Modifier,
     state: SwipeableCardsState,
     properties: SwipeableCardsProperties = SwipeableCardsProperties(),
-    animations: SwipeableCardsAnimations = SwipeableCardsAnimations(),
     factors: SwipeableCardsFactors = SwipeableCardsFactors(),
     onSwipe: (T, SwipeableCardDirection) -> Unit,
     content: LazySwipeableCardsScope<T>.() -> Unit,
 ) {
-    val itemProvider = rememberItemProvider<T>(
+    val itemProvider = rememberItemProvider(
         state = state,
         properties = properties,
-        animations = animations,
         factors = factors,
         onSwipe = onSwipe,
         customLazyListScope = content,
@@ -93,9 +93,7 @@ fun <T> LazySwipeableCards(
 
     LazyLayout(
         modifier = modifier
-            .onGloballyPositioned {
-                state.onSizeChange(it.size)
-            }
+            .onGloballyPositioned { state.onSizeChange(it.size) }
             .padding(
                 end = properties.padding,
                 top = properties.padding.div(2)

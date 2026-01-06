@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -35,7 +34,6 @@ fun CardItem(
     modifier: Modifier = Modifier,
     index: Int,
     cardData: CardData,
-    offset: Offset,
 ) {
     Card(
         modifier = modifier
@@ -54,14 +52,11 @@ fun CardItem(
             )
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.BottomStart
             ) {
-
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     Box(
                         modifier = Modifier
@@ -84,7 +79,7 @@ fun CardItem(
                             verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Text(
-                                text = index.toString(),
+                                text = "Card #${index + 1}",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -101,13 +96,6 @@ fun CardItem(
                                 color = Color.White.copy(alpha = 0.8f),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
-
-                            Text(
-                                text = offset.toString(),
-                                fontSize = 15.sp,
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
                         }
                     }
                 }
@@ -123,7 +111,6 @@ fun CardItemPreview() {
         CardItem(
             index = 0,
             cardData = sampleData.first(),
-            offset = Offset.Zero
         )
     }
 }
