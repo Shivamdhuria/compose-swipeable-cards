@@ -46,7 +46,7 @@ fun CardsScreen(
         modifier = modifier,
     ) {
         LazySwipeableCards(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(10.dp),
             state = state,
             onSwipe = { item, direction ->
                 Log.d("CardsScreen", "onSwipe: $item, $direction")
