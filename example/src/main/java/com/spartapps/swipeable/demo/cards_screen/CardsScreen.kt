@@ -46,7 +46,7 @@ fun CardsScreen(
         modifier = modifier,
     ) {
         LazySwipeableCards(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier,
             state = state,
             onSwipe = { item, direction ->
                 Log.d("CardsScreen", "onSwipe: $item, $direction")
@@ -59,70 +59,70 @@ fun CardsScreen(
                 )
             }
         }
-
-        // Navigation controls row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ActionButton(
-                onClick = { state.moveNext() },
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                text = "Next Card"
-            )
-
-            Text(
-                text = "${state.currentCardIndex + 1} of ${data.size}",
-            )
-
-            ActionButton(
-                onClick = { state.goBack() },
-                icon = Icons.Outlined.Refresh,
-                text = "Undo",
-                enabled = state.canSwipeBack.value,
-            )
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-        // Swipe controls row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ActionButton(
-                onClick = { state.swipe(SwipeableCardDirection.Left) },
-                icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                text = "Swipe\nLeft"
-            )
-
-            Column {
-                OutlinedTextField(
-                    modifier = Modifier.width(100.dp),
-                    value = indexInput,
-                    onValueChange = { indexInput = it },
-                    label = { Text("Index") }
-                )
-                Button(
-                    onClick = {
-                        indexInput.toIntOrNull()?.let {
-                            state.setCurrentIndex(it)
-                        }
-                    }
-                ) {
-                    Text("Set Index")
-                }
-            }
-
-            ActionButton(
-                onClick = { state.swipe(SwipeableCardDirection.Right) },
-                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                text = "Swipe\nRight"
-            )
-        }
     }
+//        // Navigation controls row
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(horizontal = 20.dp),
+//            horizontalArrangement = Arrangement.SpaceBetween,
+//            verticalAlignment = Alignment.CenterVertically,
+//        ) {
+//            ActionButton(
+//                onClick = { state.moveNext() },
+//                icon = Icons.AutoMirrored.Filled.ArrowBack,
+//                text = "Next Card"
+//            )
+//
+//            Text(
+//                text = "${state.currentCardIndex + 1} of ${data.size}",
+//            )
+//
+//            ActionButton(
+//                onClick = { state.goBack() },
+//                icon = Icons.Outlined.Refresh,
+//                text = "Undo",
+//                enabled = state.canSwipeBack.value,
+//            )
+//        }
+//        Spacer(modifier = Modifier.height(20.dp))
+//        // Swipe controls row
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(horizontal = 20.dp),
+//            horizontalArrangement = Arrangement.SpaceBetween,
+//            verticalAlignment = Alignment.CenterVertically,
+//        ) {
+//            ActionButton(
+//                onClick = { state.swipe(SwipeableCardDirection.Left) },
+//                icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+//                text = "Swipe\nLeft"
+//            )
+//
+//            Column {
+//                OutlinedTextField(
+//                    modifier = Modifier.width(100.dp),
+//                    value = indexInput,
+//                    onValueChange = { indexInput = it },
+//                    label = { Text("Index") }
+//                )
+//                Button(
+//                    onClick = {
+//                        indexInput.toIntOrNull()?.let {
+//                            state.setCurrentIndex(it)
+//                        }
+//                    }
+//                ) {
+//                    Text("Set Index")
+//                }
+//            }
+//
+//            ActionButton(
+//                onClick = { state.swipe(SwipeableCardDirection.Right) },
+//                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+//                text = "Swipe\nRight"
+//            )
+//        }
+//    }
 }

@@ -37,8 +37,7 @@ fun CardItem(
 ) {
     Card(
         modifier = modifier
-            .fillMaxWidth()
-            .height(550.dp),
+            .fillMaxSize(),
         border = BorderStroke(1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
     ) {
         val dominantColor = rememberDominantColor(imageRes = cardData.image)
