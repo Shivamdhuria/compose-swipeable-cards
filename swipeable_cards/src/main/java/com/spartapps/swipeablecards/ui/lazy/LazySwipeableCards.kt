@@ -1,5 +1,6 @@
 package com.spartapps.swipeablecards.ui.lazy
 
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
@@ -21,6 +22,8 @@ import com.spartapps.swipeablecards.ui.SwipeableCardDirection
 import com.spartapps.swipeablecards.ui.SwipeableCardsFactors
 import com.spartapps.swipeablecards.ui.SwipeableCardsProperties
 import kotlinx.coroutines.launch
+
+private const val TAG = "LazySwipeableCards"
 
 /**
  * A composable that displays a stack of cards with page curl flip effect.
@@ -113,10 +116,19 @@ fun <T> LazySwipeableCards(
             indexesWithPlaceables.forEach { (index, placeables) ->
                 val item = itemProvider.getItem(index)
                 item?.let {
+                    // Calculate z-index: previous card renders on top during backward swipe
+                    val zIndex = if (state.isBackwardSwipe && index == state.currentCardIndex - 1) {
+                        1f  // Previous card on top during backward swipe
+                    } else {
+                        -index.toFloat()
+                    }
+
+                    Log.d(TAG, "📐 PLACING CARD $index - zIndex=$zIndex, isBackwardSwipe=${state.isBackwardSwipe}, currentIndex=${state.currentCardIndex}")
+
                     placeables.forEach { placeable ->
                         placeable.placeRelative(
                             position = animatables[index]?.value?.round() ?: IntOffset.Zero,
-                            zIndex = -index.toFloat(),
+                            zIndex = zIndex,
                         )
                     }
                 }

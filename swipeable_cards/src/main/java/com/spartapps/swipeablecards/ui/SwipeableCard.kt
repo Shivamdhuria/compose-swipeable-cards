@@ -3,6 +3,7 @@ package com.spartapps.swipeablecards.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import com.spartapps.swipeablecards.state.SwipeableCardsState
 import com.spartapps.swipeablecards.ui.pagecurl.PageCurlCard
 
 /**
@@ -15,6 +16,8 @@ internal fun SwipeableCard(
     modifier: Modifier = Modifier,
     properties: SwipeableCardsProperties,
     draggable: Boolean,
+    state: SwipeableCardsState,
+    cardIndex: Int,
     scale: Float,
     onSwipe: (SwipeableCardDirection) -> Unit,
     content: @Composable () -> Unit,
@@ -26,6 +29,8 @@ internal fun SwipeableCard(
         draggingAcceleration = properties.draggingAcceleration,
         enableHapticFeedback = properties.enableHapticFeedbackOnThreshold,
         draggable = draggable,
+        state = state,
+        cardIndex = cardIndex,
         onSwipeLeft = { onSwipe(SwipeableCardDirection.Left) },
         onSwipeRight = { onSwipe(SwipeableCardDirection.Right) },
         content = content,

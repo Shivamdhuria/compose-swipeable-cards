@@ -1,32 +1,29 @@
 package com.spartapps.swipeablecards.ui.pagecurl
 
 import android.util.Log
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
-import kotlinx.coroutines.runBlocking
-import kotlin.math.absoluteValue
+import com.spartapps.swipeablecards.state.SwipeableCardsState
+import kotlinx.coroutines.launch
+
+private const val TAG = "PageCurlCard"
 
 /**
  * A card composable with page curl effect for book-like page flipping.
+ *
+ * This is now a simple presentational component that delegates all logic to SwipeableCardsState.
  *
  * @param modifier Modifier for the card container
  * @param config Configuration for the curl effect (radius, shadow)
@@ -34,6 +31,8 @@ import kotlin.math.absoluteValue
  * @param draggingAcceleration Multiplier for drag sensitivity
  * @param enableHapticFeedback Whether to trigger haptic feedback when threshold is crossed
  * @param draggable Whether the card can be dragged
+ * @param state The swipeable cards state managing all animation logic
+ * @param cardIndex The index of this card in the stack
  * @param onSwipeLeft Called when card is swiped left (page flip forward)
  * @param onSwipeRight Called when card is swiped right (page flip backward)
  * @param content The card content
@@ -46,62 +45,52 @@ internal fun PageCurlCard(
     draggingAcceleration: Float = 1f,
     enableHapticFeedback: Boolean = true,
     draggable: Boolean = true,
+    state: SwipeableCardsState,
+    cardIndex: Int,
     onSwipeLeft: () -> Unit = {},
     onSwipeRight: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val thresholdPx = with(LocalDensity.current) { swipeThreshold.toPx() }
 
-    var curlState by remember { mutableStateOf(CurlState.Idle) }
-    var pendingDirection by remember { mutableStateOf<SwipeDirection?>(null) }
-    var containerWidth by remember { mutableFloatStateOf(0f) }
-    var horizontalDrag by remember { mutableFloatStateOf(0f) }
-    var firstHaptic by remember { mutableStateOf(true) }
+    // Check if this card should show the curl effect
+    val isPreviousCardInBackwardSwipe = state.isBackwardSwipe && cardIndex == state.currentCardIndex - 1
+    val isCurrentCard = cardIndex == state.currentCardIndex
 
-    val dragStart = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
-    val dragCurrent = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    // Determine which drag positions to use:
+    // - Forward swipe (or undetermined): show curl on current card
+    // - Backward swipe: show curl ONLY on previous card, NOT on current card
+    val shouldShowCurl = if (state.isBackwardSwipe) {
+        isPreviousCardInBackwardSwipe
+    } else {
+        isCurrentCard
+    }
 
-    // Handle curl state transitions
-    LaunchedEffect(curlState) {
-        when (curlState) {
-            CurlState.Completing -> {
-                pendingDirection?.let { direction ->
-                    // Animate to fully curled (left edge)
-                    dragCurrent.animateTo(
-                        targetValue = Offset(0f, dragCurrent.value.y),
-                        animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
-                    )
+    val effectiveDragStart = if (shouldShowCurl) {
+        state.curlDragStart
+    } else {
+        Offset.Zero
+    }
 
-                    // Notify and reset
-                    when (direction) {
-                        SwipeDirection.Left -> onSwipeLeft()
-                        SwipeDirection.Right -> onSwipeRight()
-                    }
+    val effectiveDragCurrent = if (shouldShowCurl) {
+        state.curlDragCurrent
+    } else {
+        Offset.Zero
+    }
 
-                    dragStart.snapTo(Offset.Zero)
-                    dragCurrent.snapTo(Offset.Zero)
-                    horizontalDrag = 0f
-                    curlState = CurlState.Idle
-                    pendingDirection = null
-                }
-            }
+    Log.d(TAG, "🎴 CARD $cardIndex - isBackwardSwipe=${state.isBackwardSwipe}, isPrevious=$isPreviousCardInBackwardSwipe, isCurrent=$isCurrentCard, shouldShowCurl=$shouldShowCurl, dragStart=$effectiveDragStart, dragCurrent=$effectiveDragCurrent")
 
-            CurlState.Resetting -> {
-                // Animate back to flat
-                dragCurrent.animateTo(
-                    targetValue = dragStart.value,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
-                )
-
-                dragStart.snapTo(Offset.Zero)
-                dragCurrent.snapTo(Offset.Zero)
-                horizontalDrag = 0f
-                curlState = CurlState.Idle
-            }
-
-            else -> { /* Idle or Dragging - handled by gesture */ }
+    // Run animations based on state changes
+    LaunchedEffect(state.curlState) {
+        if (isCurrentCard) {
+            state.runCurlAnimation(
+                scope = this,
+                onSwipeLeft = onSwipeLeft,
+                onSwipeRight = onSwipeRight
+            )
         }
     }
 
@@ -109,69 +98,38 @@ internal fun PageCurlCard(
         modifier = modifier
             .pageCurlOrFallback(
                 config = config,
-                dragStart = dragStart.value,
-                dragCurrent = dragCurrent.value,
+                dragStart = effectiveDragStart,
+                dragCurrent = effectiveDragCurrent,
                 fallbackOffset = Offset.Zero,
             )
             .then(
-                if (draggable && curlState in listOf(CurlState.Idle, CurlState.Dragging)) {
+                if (draggable && isCurrentCard && state.curlState in listOf(CurlState.Idle, CurlState.Dragging)) {
                     Modifier.pointerInput(Unit) {
-                        containerWidth = size.width.toFloat()
-
                         detectDragGestures(
                             onDragStart = { startOffset ->
-                                curlState = CurlState.Dragging
-                                horizontalDrag = 0f
-                                val startPos = Offset(size.width.toFloat(), startOffset.y)
-                                runBlocking {
-                                    dragStart.snapTo(startPos)
-                                    dragCurrent.snapTo(startPos)
+                                scope.launch {
+                                    state.containerWidth = size.width.toFloat()
+                                    state.onCurlDragStart(startOffset)
                                 }
                             },
                             onDragEnd = {
-                                val draggedLeft = horizontalDrag < -thresholdPx
-                                val draggedRight = horizontalDrag > thresholdPx
-
-                                when {
-                                    draggedLeft -> {
-                                        Log.e("PageCurlCard", "Swiped left")
-                                        pendingDirection = SwipeDirection.Left
-                                        curlState = CurlState.Completing
-                                    }
-                                    draggedRight -> {
-                                        Log.e("PageCurlCard", "Swiped RIGHT")
-                                        pendingDirection = SwipeDirection.Right
-                                        curlState = CurlState.Completing
-                                    }
-                                    else -> {
-                                        Log.e("PageCurlCard", "Swiped RESETTING")
-                                        curlState = CurlState.Resetting
-                                    }
-                                }
-                                firstHaptic = true
+                                state.onCurlDragEnd(
+                                    thresholdPx = thresholdPx,
+                                    onSwipeLeft = {}, // Will be called from animation
+                                    onSwipeRight = {} // Will be called from animation
+                                )
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
-
-                                val acceleratedX = dragAmount.x * draggingAcceleration
-                                horizontalDrag += if (isRtl) -acceleratedX else acceleratedX
-
-                                val curlX = (containerWidth + horizontalDrag).coerceIn(0f, containerWidth)
-                                val newPos = Offset(
-                                    x = curlX,
-                                    y = dragStart.value.y + dragAmount.y * 0.2f
-                                )
-                                runBlocking { dragCurrent.snapTo(newPos) }
-
-                                if (enableHapticFeedback) {
-                                    if (horizontalDrag.absoluteValue > thresholdPx) {
-                                        if (firstHaptic) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            firstHaptic = false
-                                        }
-                                    } else {
-                                        firstHaptic = true
-                                    }
+                                scope.launch {
+                                    state.onCurlDrag(
+                                        dragAmount = dragAmount,
+                                        draggingAcceleration = draggingAcceleration,
+                                        isRtl = isRtl,
+                                        thresholdPx = thresholdPx,
+                                        enableHapticFeedback = enableHapticFeedback,
+                                        haptic = if (enableHapticFeedback) haptic else null
+                                    )
                                 }
                             }
                         )
@@ -184,6 +142,3 @@ internal fun PageCurlCard(
         content()
     }
 }
-
-/** Internal swipe direction for page curl. */
-private enum class SwipeDirection { Left, Right }

@@ -63,10 +63,20 @@ internal class CardItemProvider<T>(
         SwipeableCard(
             properties = properties,
             draggable = isDraggable,
+            state = state,
+            cardIndex = index,
             scale = scale,
             onSwipe = { direction ->
-                state.moveNext()
-                item?.let { cardItem -> onSwipe(cardItem.item, direction) }
+                when (direction) {
+                    SwipeableCardDirection.Left -> {
+                        state.moveNext()
+                        item?.let { cardItem -> onSwipe(cardItem.item, direction) }
+                    }
+                    SwipeableCardDirection.Right -> {
+                        state.goBack()
+                        item?.let { cardItem -> onSwipe(cardItem.item, direction) }
+                    }
+                }
             },
         ) {
             item?.itemContent?.invoke(item.item, index)

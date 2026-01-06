@@ -1,22 +1,46 @@
 package com.spartapps.swipeablecards.state
 
+import android.util.Log
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.IntSize
 import com.spartapps.swipeablecards.ui.SwipeableCardDirection
 import com.spartapps.swipeablecards.ui.SwipeableCardsDefaults
+import com.spartapps.swipeablecards.ui.pagecurl.CurlState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
+
+private const val TAG = "SwipeableCardsState"
+
+/**
+ * Direction of the curl animation.
+ */
+internal enum class CurlDirection {
+    /** Left swipe - curl page away (forward) */
+    FORWARD,
+    /** Right swipe - uncurl previous page (backward) */
+    BACKWARD
+}
 
 /**
  * Manages the state of a SwipeableCards stack.
  *
  * This class maintains the current position in the card stack and handles navigation
  * between cards while enforcing boundaries and tracking navigation possibilities.
+ * Also manages all page curl animation state and logic.
  */
 class SwipeableCardsState(
     val visibleCardsInStack: Int = SwipeableCardsDefaults.VISIBLE_CARDS_IN_STACK,
@@ -56,10 +80,72 @@ class SwipeableCardsState(
     var canSwipeBack = derivedStateOf { currentCardIndex > 0 }
         private set
 
+    /**
+     * Tracks whether a backward swipe gesture is currently in progress.
+     * When true, the previous card will be rendered for the uncurl animation.
+     */
+    internal var isBackwardSwipe by mutableStateOf(false)
+
+    // ========== Curl Animation State ==========
+
+    /**
+     * Current state of the curl animation.
+     */
+    internal var curlState by mutableStateOf(CurlState.Idle)
+        private set
+
+    /**
+     * Direction of the current curl (forward = left swipe, backward = right swipe).
+     */
+    internal var curlDirection by mutableStateOf<CurlDirection?>(null)
+        private set
+
+    /**
+     * Accumulated horizontal drag distance in pixels.
+     */
+    internal var horizontalDrag by mutableFloatStateOf(0f)
+        private set
+
+    /**
+     * Container width for curl calculations.
+     */
+    internal var containerWidth by mutableFloatStateOf(0f)
+
+    /**
+     * Curl drag start position (for shader).
+     */
+    internal var curlDragStart by mutableStateOf(Offset.Zero)
+
+    /**
+     * Curl drag current position (for shader).
+     */
+    internal var curlDragCurrent by mutableStateOf(Offset.Zero)
+
+    /**
+     * Animatable for drag start position.
+     */
+    internal val dragStartAnimatable = Animatable(Offset.Zero, Offset.VectorConverter)
+
+    /**
+     * Animatable for drag current position.
+     */
+    internal val dragCurrentAnimatable = Animatable(Offset.Zero, Offset.VectorConverter)
+
+    /**
+     * Tracks if haptic feedback was triggered for current gesture.
+     */
+    private var firstHaptic by mutableStateOf(true)
+
     val visibleCardIndexes = derivedStateOf {
-        val maxVisible = currentCardIndex + visibleCardsInStack - 1
-        val lastIndex = minOf(maxVisible, itemCount() - 1)
-        (currentCardIndex..lastIndex).toList() + swipingVisibleCards
+        val baseRange = if (isBackwardSwipe && currentCardIndex > 0) {
+            // Include previous card during backward swipe for uncurl animation
+            (currentCardIndex - 1..minOf(currentCardIndex + visibleCardsInStack - 1, itemCount() - 1))
+        } else {
+            (currentCardIndex..minOf(currentCardIndex + visibleCardsInStack - 1, itemCount() - 1))
+        }
+        val result = baseRange.toList() + swipingVisibleCards
+        Log.d(TAG, "📋 VISIBLE CARDS - isBackwardSwipe=$isBackwardSwipe, currentIndex=$currentCardIndex, visible=$result")
+        result
     }
 
     internal fun onDragOffsetChange(
@@ -85,6 +171,9 @@ class SwipeableCardsState(
             dragOffsets.remove(currentCardIndex)
             swipingVisibleCards.remove(currentCardIndex)
         }
+        isBackwardSwipe = false
+        curlDragStart = Offset.Zero
+        curlDragCurrent = Offset.Zero
     }
 
     /**
@@ -97,6 +186,9 @@ class SwipeableCardsState(
         if (currentCardIndex < itemCount()) {
             currentCardIndex++
         }
+        isBackwardSwipe = false
+        curlDragStart = Offset.Zero
+        curlDragCurrent = Offset.Zero
     }
 
     /**
@@ -126,6 +218,212 @@ class SwipeableCardsState(
         if (index in 0..<itemCount()) {
             currentCardIndex = index
             dragOffsets.clear()
+        }
+    }
+
+    // ========== Curl Animation Methods ==========
+
+    /**
+     * Called when drag gesture starts.
+     */
+    internal suspend fun onCurlDragStart(startOffset: Offset) {
+        curlState = CurlState.Dragging
+        curlDirection = null
+        horizontalDrag = 0f
+        val startPos = Offset(containerWidth, startOffset.y)
+        dragStartAnimatable.snapTo(startPos)
+        dragCurrentAnimatable.snapTo(startPos)
+        curlDragStart = startPos
+        curlDragCurrent = startPos
+    }
+
+    /**
+     * Called during drag gesture.
+     */
+    internal suspend fun onCurlDrag(
+        dragAmount: Offset,
+        draggingAcceleration: Float,
+        isRtl: Boolean,
+        thresholdPx: Float,
+        enableHapticFeedback: Boolean,
+        haptic: HapticFeedback?
+    ) {
+        val acceleratedX = dragAmount.x * draggingAcceleration
+        horizontalDrag += if (isRtl) -acceleratedX else acceleratedX
+
+        // Detect direction after accumulating some drag (10px threshold)
+        if (curlDirection == null && horizontalDrag.absoluteValue > 10f) {
+            curlDirection = if (horizontalDrag < 0) {
+                CurlDirection.FORWARD
+            } else {
+                if (canSwipeBack.value) {
+                    CurlDirection.BACKWARD
+                } else {
+                    null
+                }
+            }
+
+            // Notify that backward swipe started
+            if (curlDirection == CurlDirection.BACKWARD) {
+                isBackwardSwipe = true
+                Log.d(TAG, "🔙 BACKWARD SWIPE STARTED - currentIndex=$currentCardIndex, previousCard=${currentCardIndex - 1}")
+            } else if (curlDirection == CurlDirection.FORWARD) {
+                Log.d(TAG, "➡️ FORWARD SWIPE STARTED - currentIndex=$currentCardIndex")
+            }
+        }
+
+        when (curlDirection) {
+            CurlDirection.FORWARD -> {
+                // Forward curl: start from right edge, move left
+                val curlX = (containerWidth + horizontalDrag).coerceIn(0f, containerWidth)
+                val newPos = Offset(
+                    x = curlX,
+                    y = dragStartAnimatable.value.y + dragAmount.y * 0.2f
+                )
+                dragCurrentAnimatable.snapTo(newPos)
+                curlDragCurrent = newPos
+            }
+            CurlDirection.BACKWARD -> {
+                // Backward curl: REVERSE positions so curl decreases as drag increases
+                // dragStart = right edge (fixed), dragCurrent = left→right (moving)
+                // As dragCurrent approaches dragStart, distance shrinks → uncurl effect
+                val uncurlX = horizontalDrag.coerceIn(0f, containerWidth)
+                val startPos = Offset(containerWidth, dragStartAnimatable.value.y)  // RIGHT edge (fixed)
+                val newPos = Offset(
+                    x = uncurlX,  // LEFT→RIGHT (0→containerWidth)
+                    y = startPos.y + dragAmount.y * 0.2f
+                )
+                dragStartAnimatable.snapTo(startPos)
+                dragCurrentAnimatable.snapTo(newPos)
+                curlDragStart = startPos
+                curlDragCurrent = newPos
+                Log.d(TAG, "🔙 BACKWARD DRAG - uncurlX=$uncurlX, dragStart=$startPos, dragCurrent=$newPos, distance=${startPos.x - newPos.x}")
+            }
+            null -> {
+                // Direction not yet determined or blocked
+                if (!canSwipeBack.value && horizontalDrag > 0) {
+                    horizontalDrag = 0f
+                }
+            }
+        }
+
+        // Haptic feedback
+        if (enableHapticFeedback && haptic != null) {
+            if (horizontalDrag.absoluteValue > thresholdPx) {
+                if (firstHaptic) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    firstHaptic = false
+                }
+            } else {
+                firstHaptic = true
+            }
+        }
+    }
+
+    /**
+     * Called when drag gesture ends.
+     */
+    internal fun onCurlDragEnd(
+        thresholdPx: Float,
+        onSwipeLeft: () -> Unit,
+        onSwipeRight: () -> Unit
+    ) {
+        when (curlDirection) {
+            CurlDirection.FORWARD -> {
+                val draggedLeft = horizontalDrag < -thresholdPx
+                if (draggedLeft) {
+                    curlState = CurlState.Completing
+                    // Will call onSwipeLeft after animation
+                } else {
+                    curlState = CurlState.Resetting
+                }
+            }
+            CurlDirection.BACKWARD -> {
+                val draggedRight = horizontalDrag > thresholdPx
+                if (draggedRight) {
+                    curlState = CurlState.Completing
+                    // Will call onSwipeRight after animation
+                } else {
+                    curlState = CurlState.Resetting
+                    isBackwardSwipe = false
+                }
+            }
+            null -> {
+                curlState = CurlState.Resetting
+            }
+        }
+        firstHaptic = true
+    }
+
+    /**
+     * Runs curl animation based on current state.
+     * Should be called from LaunchedEffect(curlState).
+     */
+    internal suspend fun runCurlAnimation(
+        scope: CoroutineScope,
+        onSwipeLeft: () -> Unit,
+        onSwipeRight: () -> Unit
+    ) {
+        when (curlState) {
+            CurlState.Completing -> {
+                when (curlDirection) {
+                    CurlDirection.FORWARD -> {
+                        // Animate to fully curled (left edge)
+                        dragCurrentAnimatable.animateTo(
+                            targetValue = Offset(0f, dragCurrentAnimatable.value.y),
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                        ) {
+                            curlDragCurrent = this.value
+                        }
+                        onSwipeLeft()
+                    }
+                    CurlDirection.BACKWARD -> {
+                        // Animate to fully uncurled (right edge)
+                        dragCurrentAnimatable.animateTo(
+                            targetValue = Offset(containerWidth, dragCurrentAnimatable.value.y),
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                        ) {
+                            curlDragStart = dragStartAnimatable.value
+                            curlDragCurrent = this.value
+                        }
+                        onSwipeRight()
+                    }
+                    null -> {}
+                }
+
+                // Reset state
+                dragStartAnimatable.snapTo(Offset.Zero)
+                dragCurrentAnimatable.snapTo(Offset.Zero)
+                curlDragStart = Offset.Zero
+                curlDragCurrent = Offset.Zero
+                horizontalDrag = 0f
+                curlState = CurlState.Idle
+                curlDirection = null
+            }
+
+            CurlState.Resetting -> {
+                // Animate back to start position
+                dragCurrentAnimatable.animateTo(
+                    targetValue = dragStartAnimatable.value,
+                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                ) {
+                    if (isBackwardSwipe) {
+                        curlDragStart = dragStartAnimatable.value
+                        curlDragCurrent = this.value
+                    }
+                }
+
+                // Reset state
+                dragStartAnimatable.snapTo(Offset.Zero)
+                dragCurrentAnimatable.snapTo(Offset.Zero)
+                curlDragStart = Offset.Zero
+                curlDragCurrent = Offset.Zero
+                horizontalDrag = 0f
+                curlState = CurlState.Idle
+                curlDirection = null
+            }
+
+            else -> { /* Idle or Dragging */ }
         }
     }
 }
