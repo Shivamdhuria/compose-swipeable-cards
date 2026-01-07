@@ -415,22 +415,23 @@ class SwipeableCardsState(
             CurlState.Completing -> {
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
-                        // Complete curl by moving axis to left edge
-                        // Direction should be horizontal (1, 0) to create vertical curl axis
+                        // Complete curl by moving axis past left edge (negative distance)
+                        // This makes the fold smoothly move off-screen instead of stopping at the edge
                         val currentOriginY = curlAxis.origin.y
+                        val aspect = containerWidth / containerHeight
                         val targetAxis = CurlAxis(
                             origin = Offset(0f, currentOriginY),
                             direction = Offset(1f, 0f),  // Horizontal direction -> vertical curl axis
-                            distance = containerWidth / containerHeight * 0.05f
+                            distance = -0.5f * aspect  // Negative = move curl far off-screen to the left
                         )
 
                         curlAxisAnimatable.animateTo(
                             targetValue = targetAxis,
-                            animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
+                            animationSpec = tween(durationMillis = 200)  // Tween for smooth, no-overshoot animation
                         ) {
                             curlAxis = this.value
                             // Also update old drag positions for backward compatibility
-                            curlDragCurrent = Offset(containerWidth * 0.05f, containerHeight * currentOriginY)
+                            curlDragCurrent = Offset(-containerWidth * 0.5f, containerHeight * currentOriginY)
                             curlDragStart = Offset(containerWidth * 1.5f, containerHeight * currentOriginY)
                         }
                         onSwipeLeft()
@@ -448,7 +449,7 @@ class SwipeableCardsState(
 
                         curlAxisAnimatable.animateTo(
                             targetValue = targetAxis,
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                            animationSpec = tween(durationMillis = 250)  // Tween for smooth animation
                         ) {
                             curlAxis = this.value
                             // Also update old drag positions for backward compatibility
@@ -493,7 +494,7 @@ class SwipeableCardsState(
                         Log.d(TAG, "🔄 FORWARD RESET: moving curl from distance=${curlAxis.distance} to ${aspect * 1.5f} (off-screen)")
                         curlAxisAnimatable.animateTo(
                             targetValue = targetAxis,
-                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                            animationSpec = tween(durationMillis = 150)  // Tween for smooth animation
                         ) {
                             curlAxis = this.value
                             curlDragCurrent = dragStartAnimatable.value
