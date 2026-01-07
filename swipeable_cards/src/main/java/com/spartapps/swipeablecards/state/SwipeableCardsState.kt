@@ -107,6 +107,12 @@ class SwipeableCardsState(
         private set
 
     /**
+     * Accumulated vertical drag distance in pixels.
+     */
+    internal var verticalDrag by mutableFloatStateOf(0f)
+        private set
+
+    /**
      * Container width for curl calculations.
      */
     internal var containerWidth by mutableFloatStateOf(0f)
@@ -230,6 +236,7 @@ class SwipeableCardsState(
         curlState = CurlState.Dragging
         curlDirection = null
         horizontalDrag = 0f
+        verticalDrag = 0f
         // Use actual touch position for asymmetric curl effect
         val startPos = startOffset
         dragStartAnimatable.snapTo(startPos)
@@ -251,6 +258,7 @@ class SwipeableCardsState(
     ) {
         val acceleratedX = dragAmount.x * draggingAcceleration
         horizontalDrag += if (isRtl) -acceleratedX else acceleratedX
+        verticalDrag += dragAmount.y
 
         // Detect direction after accumulating some drag (10px threshold)
         if (curlDirection == null && horizontalDrag.absoluteValue > 10f) {
@@ -275,25 +283,23 @@ class SwipeableCardsState(
 
         when (curlDirection) {
             CurlDirection.FORWARD -> {
-                // Forward curl: start from actual touch position, move left
-                val curlX = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth)
+                // Forward curl: current position = start + accumulated drag
                 val newPos = Offset(
-                    x = curlX,
-                    y = dragStartAnimatable.value.y + dragAmount.y
+                    x = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth),
+                    y = dragStartAnimatable.value.y + verticalDrag
                 )
                 dragCurrentAnimatable.snapTo(newPos)
                 curlDragCurrent = newPos
             }
             CurlDirection.BACKWARD -> {
-                // Backward curl: start from touch position, drag current follows finger
-                val uncurlX = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth)
+                // Backward curl: current position = start + accumulated drag
                 val newPos = Offset(
-                    x = uncurlX,
-                    y = dragStartAnimatable.value.y + dragAmount.y
+                    x = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth),
+                    y = dragStartAnimatable.value.y + verticalDrag
                 )
                 dragCurrentAnimatable.snapTo(newPos)
                 curlDragCurrent = newPos
-                Log.d(TAG, "🔙 BACKWARD DRAG - uncurlX=$uncurlX, dragStart=${dragStartAnimatable.value}, dragCurrent=$newPos")
+                Log.d(TAG, "🔙 BACKWARD DRAG - dragStart=${dragStartAnimatable.value}, dragCurrent=$newPos")
             }
             null -> {
                 // Direction not yet determined or blocked
@@ -392,6 +398,7 @@ class SwipeableCardsState(
                 curlDragStart = Offset.Zero
                 curlDragCurrent = Offset.Zero
                 horizontalDrag = 0f
+                verticalDrag = 0f
                 curlState = CurlState.Idle
                 curlDirection = null
             }
@@ -414,6 +421,7 @@ class SwipeableCardsState(
                 curlDragStart = Offset.Zero
                 curlDragCurrent = Offset.Zero
                 horizontalDrag = 0f
+                verticalDrag = 0f
                 curlState = CurlState.Idle
                 curlDirection = null
             }
