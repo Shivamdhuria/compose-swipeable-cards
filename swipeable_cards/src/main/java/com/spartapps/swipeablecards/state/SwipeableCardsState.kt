@@ -18,7 +18,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.IntSize
 import com.spartapps.swipeablecards.ui.SwipeableCardDirection
 import com.spartapps.swipeablecards.ui.SwipeableCardsDefaults
+import com.spartapps.swipeablecards.ui.pagecurl.CurlAxis
 import com.spartapps.swipeablecards.ui.pagecurl.CurlState
+import com.spartapps.swipeablecards.ui.pagecurl.normalized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -116,6 +118,22 @@ class SwipeableCardsState(
      * Container width for curl calculations.
      */
     internal var containerWidth by mutableFloatStateOf(0f)
+
+    /**
+     * Container height for curl calculations.
+     */
+    internal var containerHeight by mutableFloatStateOf(0f)
+
+    /**
+     * Current curl axis (calculated in Kotlin, passed to shader).
+     */
+    internal var curlAxis by mutableStateOf(CurlAxis.ZERO)
+        private set
+
+    /**
+     * Animatable for curl axis (for completion/reset animations).
+     */
+    internal val curlAxisAnimatable = Animatable(CurlAxis.ZERO, CurlAxis.VectorConverter)
 
     /**
      * Curl drag start position (for shader).
@@ -243,6 +261,10 @@ class SwipeableCardsState(
         dragCurrentAnimatable.snapTo(startPos)
         curlDragStart = startPos
         curlDragCurrent = startPos
+
+        // Initialize curl axis to zero (no curl)
+        curlAxis = CurlAxis.ZERO
+        curlAxisAnimatable.snapTo(CurlAxis.ZERO)
     }
 
     /**
@@ -290,6 +312,13 @@ class SwipeableCardsState(
                 )
                 dragCurrentAnimatable.snapTo(newPos)
                 curlDragCurrent = newPos
+
+                // Calculate curl axis from drag positions
+                curlAxis = calculateCurlAxis(
+                    dragStart = dragStartAnimatable.value,
+                    dragCurrent = newPos
+                )
+                curlAxisAnimatable.snapTo(curlAxis)
             }
             CurlDirection.BACKWARD -> {
                 // Backward curl: current position = start + accumulated drag
@@ -300,6 +329,13 @@ class SwipeableCardsState(
                 dragCurrentAnimatable.snapTo(newPos)
                 curlDragCurrent = newPos
                 Log.d(TAG, "🔙 BACKWARD DRAG - dragStart=${dragStartAnimatable.value}, dragCurrent=$newPos")
+
+                // Calculate curl axis from drag positions
+                curlAxis = calculateCurlAxis(
+                    dragStart = dragStartAnimatable.value,
+                    dragCurrent = newPos
+                )
+                curlAxisAnimatable.snapTo(curlAxis)
             }
             null -> {
                 // Direction not yet determined or blocked
@@ -370,51 +406,44 @@ class SwipeableCardsState(
             CurlState.Completing -> {
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
-                        // Complete curl by creating vertical axis at left edge
-                        // Move both points to aligned Y, dragCurrent near left, dragStart far right
-                        val midY = (dragStartAnimatable.value.y + dragCurrentAnimatable.value.y) / 2f
+                        // Complete curl by moving axis to left edge
+                        // Direction should be horizontal (1, 0) to create vertical curl axis
+                        val currentOriginY = curlAxis.origin.y
+                        val targetAxis = CurlAxis(
+                            origin = Offset(0f, currentOriginY),
+                            direction = Offset(1f, 0f),  // Horizontal direction -> vertical curl axis
+                            distance = containerWidth / containerHeight * 0.05f
+                        )
 
-                        kotlinx.coroutines.coroutineScope {
-                            launch {
-                                dragCurrentAnimatable.animateTo(
-                                    targetValue = Offset(containerWidth * 0.05f, midY),
-                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
-                                ) {
-                                    curlDragCurrent = this.value
-                                }
-                            }
-                            launch {
-                                dragStartAnimatable.animateTo(
-                                    targetValue = Offset(containerWidth * 1.5f, midY),
-                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
-                                ) {
-                                    curlDragStart = this.value
-                                }
-                            }
+                        curlAxisAnimatable.animateTo(
+                            targetValue = targetAxis,
+                            animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
+                        ) {
+                            curlAxis = this.value
+                            // Also update old drag positions for backward compatibility
+                            curlDragCurrent = Offset(containerWidth * 0.05f, containerHeight * currentOriginY)
+                            curlDragStart = Offset(containerWidth * 1.5f, containerHeight * currentOriginY)
                         }
                         onSwipeLeft()
                     }
                     CurlDirection.BACKWARD -> {
-                        // Complete uncurl - move to right edge
-                        val midY = (dragStartAnimatable.value.y + dragCurrentAnimatable.value.y) / 2f
+                        // Complete uncurl by moving axis to right edge
+                        // Direction should be horizontal (-1, 0) to create vertical curl axis pointing left
+                        val currentOriginY = curlAxis.origin.y
+                        val targetAxis = CurlAxis(
+                            origin = Offset(containerWidth / containerHeight, currentOriginY),
+                            direction = Offset(-1f, 0f),  // Horizontal direction reversed -> vertical curl axis
+                            distance = containerWidth / containerHeight * 0.95f
+                        )
 
-                        kotlinx.coroutines.coroutineScope {
-                            launch {
-                                dragCurrentAnimatable.animateTo(
-                                    targetValue = Offset(containerWidth * 0.95f, midY),
-                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
-                                ) {
-                                    curlDragCurrent = this.value
-                                }
-                            }
-                            launch {
-                                dragStartAnimatable.animateTo(
-                                    targetValue = Offset(-containerWidth * 0.5f, midY),
-                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
-                                ) {
-                                    curlDragStart = this.value
-                                }
-                            }
+                        curlAxisAnimatable.animateTo(
+                            targetValue = targetAxis,
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                        ) {
+                            curlAxis = this.value
+                            // Also update old drag positions for backward compatibility
+                            curlDragCurrent = Offset(containerWidth * 0.95f, containerHeight * currentOriginY)
+                            curlDragStart = Offset(-containerWidth * 0.5f, containerHeight * currentOriginY)
                         }
                         onSwipeRight()
                     }
@@ -426,6 +455,8 @@ class SwipeableCardsState(
                 dragCurrentAnimatable.snapTo(Offset.Zero)
                 curlDragStart = Offset.Zero
                 curlDragCurrent = Offset.Zero
+                curlAxis = CurlAxis.ZERO
+                curlAxisAnimatable.snapTo(CurlAxis.ZERO)
                 horizontalDrag = 0f
                 verticalDrag = 0f
                 curlState = CurlState.Idle
@@ -433,18 +464,16 @@ class SwipeableCardsState(
             }
 
             CurlState.Resetting -> {
-                // Animate back to start position - collapse curl by moving current to start
-                kotlinx.coroutines.coroutineScope {
-                    launch {
-                        dragCurrentAnimatable.animateTo(
-                            targetValue = dragStartAnimatable.value,
-                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
-                        ) {
-                            curlDragCurrent = this.value
-                            if (isBackwardSwipe) {
-                                curlDragStart = dragStartAnimatable.value
-                            }
-                        }
+                // Animate curl axis back to zero (no curl)
+                curlAxisAnimatable.animateTo(
+                    targetValue = CurlAxis.ZERO,
+                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                ) {
+                    curlAxis = this.value
+                    // Also update old drag positions for backward compatibility
+                    curlDragCurrent = dragStartAnimatable.value
+                    if (isBackwardSwipe) {
+                        curlDragStart = dragStartAnimatable.value
                     }
                 }
 
@@ -453,6 +482,8 @@ class SwipeableCardsState(
                 dragCurrentAnimatable.snapTo(Offset.Zero)
                 curlDragStart = Offset.Zero
                 curlDragCurrent = Offset.Zero
+                curlAxis = CurlAxis.ZERO
+                curlAxisAnimatable.snapTo(CurlAxis.ZERO)
                 horizontalDrag = 0f
                 verticalDrag = 0f
                 curlState = CurlState.Idle
@@ -461,5 +492,80 @@ class SwipeableCardsState(
 
             else -> { /* Idle or Dragging */ }
         }
+    }
+
+    /**
+     * Calculates the curl axis from drag positions.
+     * Matches the shader's calculation logic exactly.
+     *
+     * @param dragStart Initial touch position in pixels
+     * @param dragCurrent Current drag position in pixels
+     * @return CurlAxis with normalized coordinates
+     */
+    internal fun calculateCurlAxis(
+        dragStart: Offset,
+        dragCurrent: Offset
+    ): CurlAxis {
+        if (containerWidth <= 0f || containerHeight <= 0f) {
+            return CurlAxis.ZERO
+        }
+
+        val aspect = containerWidth / containerHeight
+
+        // Convert to normalized coordinates (0-1), with Y flipped (shader uses Y-up)
+        // and aspect-corrected X
+        val mouse = Offset(
+            x = (dragCurrent.x / containerWidth) * aspect,
+            y = (containerHeight - dragCurrent.y) / containerHeight
+        )
+        val click = Offset(
+            x = (dragStart.x / containerWidth) * aspect,
+            y = (containerHeight - dragStart.y) / containerHeight
+        )
+
+        // Apply absolute value to flipped click (matches shader: abs(flippedClick))
+        val absFlippedClick = Offset(
+            x = kotlin.math.abs(click.x),
+            y = kotlin.math.abs(click.y)
+        )
+
+        // Direction from current mouse to click position (matches shader)
+        val dirVec = absFlippedClick - mouse
+        val mouseDir = dirVec.normalized()
+
+        if (mouseDir.x == 0f) {
+            // Vertical drag - axis is horizontal at current Y
+            return CurlAxis(
+                origin = Offset(0f, mouse.y.coerceIn(0f, 1f)),
+                direction = Offset(1f, 0f),
+                distance = 0f
+            )
+        }
+
+        // Origin: where mouseDir line intersects left edge (x=0)
+        // Solve: mouse + t * mouseDir where x = 0
+        // 0 = mouse.x + t * mouseDir.x
+        // t = -mouse.x / mouseDir.x
+        val t = -mouse.x / mouseDir.x
+        val originY = (mouse.y + mouseDir.y * t).coerceIn(0f, 1f)
+        val origin = Offset(0f, originY)
+
+        // Distance of mouse along direction from origin
+        val baseDistance = (mouse - origin).getDistance()
+        val clickOffsetTerm = (aspect - absFlippedClick.x) / mouseDir.x
+        val mouseDist = (baseDistance + clickOffsetTerm).coerceIn(0f, aspect / mouseDir.x)
+
+        // If direction is pointing left (negative X), use simple distance
+        val finalDistance = if (mouseDir.x < 0f) {
+            (mouse - origin).getDistance()
+        } else {
+            mouseDist
+        }
+
+        return CurlAxis(
+            origin = origin,
+            direction = mouseDir,
+            distance = finalDistance
+        )
     }
 }

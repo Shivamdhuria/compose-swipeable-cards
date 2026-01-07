@@ -60,7 +60,7 @@ internal fun PageCurlCard(
     val isPreviousCardInBackwardSwipe = state.isBackwardSwipe && cardIndex == state.currentCardIndex - 1
     val isCurrentCard = cardIndex == state.currentCardIndex
 
-    // Determine which drag positions to use:
+    // Determine which curl axis to use:
     // - Forward swipe (or undetermined): show curl on current card
     // - Backward swipe: show curl ONLY on previous card, NOT on current card
     val shouldShowCurl = if (state.isBackwardSwipe) {
@@ -69,19 +69,13 @@ internal fun PageCurlCard(
         isCurrentCard
     }
 
-    val effectiveDragStart = if (shouldShowCurl) {
-        state.curlDragStart
+    val effectiveCurlAxis = if (shouldShowCurl) {
+        state.curlAxis
     } else {
-        Offset.Zero
+        CurlAxis.ZERO
     }
 
-    val effectiveDragCurrent = if (shouldShowCurl) {
-        state.curlDragCurrent
-    } else {
-        Offset.Zero
-    }
-
-    Log.d(TAG, "🎴 CARD $cardIndex - isBackwardSwipe=${state.isBackwardSwipe}, isPrevious=$isPreviousCardInBackwardSwipe, isCurrent=$isCurrentCard, shouldShowCurl=$shouldShowCurl, dragStart=$effectiveDragStart, dragCurrent=$effectiveDragCurrent")
+    Log.d(TAG, "🎴 CARD $cardIndex - isBackwardSwipe=${state.isBackwardSwipe}, isPrevious=$isPreviousCardInBackwardSwipe, isCurrent=$isCurrentCard, shouldShowCurl=$shouldShowCurl, curlAxis=$effectiveCurlAxis")
 
     // Run animations based on state changes
     LaunchedEffect(state.curlState) {
@@ -98,8 +92,7 @@ internal fun PageCurlCard(
         modifier = modifier
             .pageCurlOrFallback(
                 config = config,
-                dragStart = effectiveDragStart,
-                dragCurrent = effectiveDragCurrent,
+                curlAxis = effectiveCurlAxis,
                 fallbackOffset = Offset.Zero,
             )
             .then(
@@ -109,6 +102,7 @@ internal fun PageCurlCard(
                             onDragStart = { startOffset ->
                                 scope.launch {
                                     state.containerWidth = size.width.toFloat()
+                                    state.containerHeight = size.height.toFloat()
                                     state.onCurlDragStart(startOffset)
                                 }
                             },
