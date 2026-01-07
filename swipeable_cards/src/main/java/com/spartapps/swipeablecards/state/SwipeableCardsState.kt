@@ -370,22 +370,51 @@ class SwipeableCardsState(
             CurlState.Completing -> {
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
-                        // Animate to fully curled - move beyond left edge based on curl origin
-                        dragCurrentAnimatable.animateTo(
-                            targetValue = Offset(-containerWidth * 0.2f, dragCurrentAnimatable.value.y),
-                            animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
-                        ) {
-                            curlDragCurrent = this.value
+                        // Complete curl by creating vertical axis at left edge
+                        // Move both points to aligned Y, dragCurrent near left, dragStart far right
+                        val midY = (dragStartAnimatable.value.y + dragCurrentAnimatable.value.y) / 2f
+
+                        kotlinx.coroutines.coroutineScope {
+                            launch {
+                                dragCurrentAnimatable.animateTo(
+                                    targetValue = Offset(containerWidth * 0.05f, midY),
+                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
+                                ) {
+                                    curlDragCurrent = this.value
+                                }
+                            }
+                            launch {
+                                dragStartAnimatable.animateTo(
+                                    targetValue = Offset(containerWidth * 1.5f, midY),
+                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
+                                ) {
+                                    curlDragStart = this.value
+                                }
+                            }
                         }
                         onSwipeLeft()
                     }
                     CurlDirection.BACKWARD -> {
-                        // Animate to fully uncurled - move beyond right edge
-                        dragCurrentAnimatable.animateTo(
-                            targetValue = Offset(containerWidth * 1.2f, dragCurrentAnimatable.value.y),
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
-                        ) {
-                            curlDragCurrent = this.value
+                        // Complete uncurl - move to right edge
+                        val midY = (dragStartAnimatable.value.y + dragCurrentAnimatable.value.y) / 2f
+
+                        kotlinx.coroutines.coroutineScope {
+                            launch {
+                                dragCurrentAnimatable.animateTo(
+                                    targetValue = Offset(containerWidth * 0.95f, midY),
+                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                                ) {
+                                    curlDragCurrent = this.value
+                                }
+                            }
+                            launch {
+                                dragStartAnimatable.animateTo(
+                                    targetValue = Offset(-containerWidth * 0.5f, midY),
+                                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
+                                ) {
+                                    curlDragStart = this.value
+                                }
+                            }
                         }
                         onSwipeRight()
                     }
@@ -404,14 +433,18 @@ class SwipeableCardsState(
             }
 
             CurlState.Resetting -> {
-                // Animate back to start position
-                dragCurrentAnimatable.animateTo(
-                    targetValue = dragStartAnimatable.value,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
-                ) {
-                    if (isBackwardSwipe) {
-                        curlDragStart = dragStartAnimatable.value
-                        curlDragCurrent = this.value
+                // Animate back to start position - collapse curl by moving current to start
+                kotlinx.coroutines.coroutineScope {
+                    launch {
+                        dragCurrentAnimatable.animateTo(
+                            targetValue = dragStartAnimatable.value,
+                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                        ) {
+                            curlDragCurrent = this.value
+                            if (isBackwardSwipe) {
+                                curlDragStart = dragStartAnimatable.value
+                            }
+                        }
                     }
                 }
 
