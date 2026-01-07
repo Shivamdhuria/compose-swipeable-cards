@@ -316,7 +316,8 @@ class SwipeableCardsState(
                 // Calculate curl axis from drag positions
                 curlAxis = calculateCurlAxis(
                     dragStart = dragStartAnimatable.value,
-                    dragCurrent = newPos
+                    dragCurrent = newPos,
+                    isBackward = false
                 )
                 curlAxisAnimatable.snapTo(curlAxis)
             }
@@ -330,10 +331,11 @@ class SwipeableCardsState(
                 curlDragCurrent = newPos
                 Log.d(TAG, "🔙 BACKWARD DRAG - dragStart=${dragStartAnimatable.value}, dragCurrent=$newPos")
 
-                // Calculate curl axis from drag positions
+                // Calculate curl axis from drag positions (backward swipe)
                 curlAxis = calculateCurlAxis(
                     dragStart = dragStartAnimatable.value,
-                    dragCurrent = newPos
+                    dragCurrent = newPos,
+                    isBackward = true
                 )
                 curlAxisAnimatable.snapTo(curlAxis)
             }
@@ -427,13 +429,14 @@ class SwipeableCardsState(
                         onSwipeLeft()
                     }
                     CurlDirection.BACKWARD -> {
-                        // Complete uncurl by moving axis to right edge
-                        // Direction should be horizontal (-1, 0) to create vertical curl axis pointing left
+                        // Complete unfold by moving distance to full width
+                        // Origin stays at left edge, distance moves all the way right
                         val currentOriginY = curlAxis.origin.y
+                        val aspect = containerWidth / containerHeight
                         val targetAxis = CurlAxis(
-                            origin = Offset(containerWidth / containerHeight, currentOriginY),
-                            direction = Offset(-1f, 0f),  // Horizontal direction reversed -> vertical curl axis
-                            distance = containerWidth / containerHeight * 0.95f
+                            origin = Offset(0f, currentOriginY),  // Origin stays at left edge
+                            direction = Offset(1f, 0f),  // Horizontal pointing right
+                            distance = aspect * 1.1f  // Full distance across (slightly beyond for complete unfold)
                         )
 
                         curlAxisAnimatable.animateTo(
@@ -496,15 +499,19 @@ class SwipeableCardsState(
 
     /**
      * Calculates the curl axis from drag positions.
-     * Matches the shader's calculation logic exactly.
+     *
+     * For forward swipes: Matches the shader's calculation logic exactly.
+     * For backward swipes: Creates a simple vertical axis that moves right based on drag distance.
      *
      * @param dragStart Initial touch position in pixels
      * @param dragCurrent Current drag position in pixels
+     * @param isBackward Whether this is a backward swipe (dragging right to show previous page)
      * @return CurlAxis with normalized coordinates
      */
     internal fun calculateCurlAxis(
         dragStart: Offset,
-        dragCurrent: Offset
+        dragCurrent: Offset,
+        isBackward: Boolean = false
     ): CurlAxis {
         if (containerWidth <= 0f || containerHeight <= 0f) {
             return CurlAxis.ZERO
@@ -512,6 +519,28 @@ class SwipeableCardsState(
 
         val aspect = containerWidth / containerHeight
 
+        // BACKWARD SWIPE: Simple vertical axis that moves from left to right
+        if (isBackward) {
+            // Calculate how far we've dragged right (0.0 to 1.0+)
+            val dragDistanceX = (dragCurrent.x - dragStart.x) / containerWidth
+            val normalizedDragX = dragDistanceX.coerceIn(0f, 1f)
+
+            // Y position based on initial touch point (middle of page if no specific touch point)
+            val normalizedY = ((containerHeight - dragStart.y) / containerHeight).coerceIn(0f, 1f)
+
+            // For unfold: origin stays at left edge, but distance increases as we drag right
+            // This makes the paper unfold from left to right
+            val originX = 0f  // Origin stays at left edge
+            val distance = (normalizedDragX * aspect).coerceIn(0f, aspect)
+
+            return CurlAxis(
+                origin = Offset(originX, normalizedY),
+                direction = Offset(1f, 0f),  // Horizontal pointing right (unfold direction)
+                distance = distance  // How far from left edge the curl has moved
+            )
+        }
+
+        // FORWARD SWIPE: Complex calculation matching shader logic
         // Convert to normalized coordinates (0-1), with Y flipped (shader uses Y-up)
         // and aspect-corrected X
         val mouse = Offset(
@@ -533,12 +562,12 @@ class SwipeableCardsState(
         val dirVec = absFlippedClick - mouse
         val mouseDir = dirVec.normalized()
 
-        if (mouseDir.x == 0f) {
-            // Vertical drag - axis is horizontal at current Y
+        if (mouseDir.x == 0f || mouseDir.x < 0f) {
+            // Vertical drag or invalid direction - create simple axis
             return CurlAxis(
                 origin = Offset(0f, mouse.y.coerceIn(0f, 1f)),
                 direction = Offset(1f, 0f),
-                distance = 0f
+                distance = mouse.x.coerceAtLeast(0f)
             )
         }
 
@@ -553,19 +582,19 @@ class SwipeableCardsState(
         // Distance of mouse along direction from origin
         val baseDistance = (mouse - origin).getDistance()
         val clickOffsetTerm = (aspect - absFlippedClick.x) / mouseDir.x
-        val mouseDist = (baseDistance + clickOffsetTerm).coerceIn(0f, aspect / mouseDir.x)
+        val maxDist = aspect / mouseDir.x
 
-        // If direction is pointing left (negative X), use simple distance
-        val finalDistance = if (mouseDir.x < 0f) {
-            (mouse - origin).getDistance()
+        // Only coerce if we have a valid range
+        val mouseDist = if (maxDist > 0f) {
+            (baseDistance + clickOffsetTerm).coerceIn(0f, maxDist)
         } else {
-            mouseDist
+            baseDistance
         }
 
         return CurlAxis(
             origin = origin,
             direction = mouseDir,
-            distance = finalDistance
+            distance = mouseDist
         )
     }
 }
