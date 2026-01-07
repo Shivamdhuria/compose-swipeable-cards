@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -501,6 +502,7 @@ class SwipeableCardsState(
                     CurlDirection.BACKWARD -> {
                         // For backward swipe reset: move curl back to left edge (fold it back)
                         // Keep isBackwardSwipe=true during animation so curl stays on previous page
+                        // Use tween instead of spring to avoid overshoot that causes glitches
                         val targetAxis = CurlAxis(
                             origin = Offset(0f, curlAxis.origin.y),
                             direction = Offset(1f, 0f),
@@ -510,7 +512,7 @@ class SwipeableCardsState(
                         Log.d(TAG, "🔄 BACKWARD RESET: moving curl from distance=${curlAxis.distance} to 0 (fold back)")
                         curlAxisAnimatable.animateTo(
                             targetValue = targetAxis,
-                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 600f)  // Faster animation
+                            animationSpec = tween(durationMillis = 150)  // Fast tween, no overshoot
                         ) {
                             curlAxis = this.value
                             curlDragCurrent = dragStartAnimatable.value
