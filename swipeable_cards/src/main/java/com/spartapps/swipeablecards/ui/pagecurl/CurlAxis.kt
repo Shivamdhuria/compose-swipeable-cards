@@ -47,8 +47,11 @@ internal data class CurlAxis(
                 )
             },
             convertFromVector = { vector ->
-                // Check if this is effectively a zero axis (distance near zero)
-                val isZero = vector.v4 < 0.001f
+                // Clamp distance to never go negative (spring animations can overshoot)
+                val clampedDistance = vector.v4.coerceAtLeast(0f)
+
+                // Check if this is effectively a zero axis (distance near zero or negative)
+                val isZero = clampedDistance < 0.001f
                 val direction = if (isZero) {
                     Offset.Zero  // Return true zero for flat pages
                 } else {
@@ -57,7 +60,7 @@ internal data class CurlAxis(
                 CurlAxis(
                     origin = Offset(vector.v1, vector.v2),
                     direction = direction,
-                    distance = vector.v4
+                    distance = clampedDistance
                 )
             }
         )

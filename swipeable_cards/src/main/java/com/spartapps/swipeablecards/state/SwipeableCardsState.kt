@@ -390,7 +390,7 @@ class SwipeableCardsState(
                 } else {
                     Log.d(TAG, "❌ Threshold NOT crossed - RESETTING")
                     curlState = CurlState.Resetting
-                    isBackwardSwipe = false
+                    // Don't set isBackwardSwipe=false here! It will be set after animation in runCurlAnimation
                 }
             }
             null -> {
@@ -475,6 +475,9 @@ class SwipeableCardsState(
             CurlState.Resetting -> {
                 Log.d(TAG, "🔄 RESETTING - curlDirection=$curlDirection, currentAxis=$curlAxis, horizontalDrag=$horizontalDrag")
 
+                // Save direction before resetting
+                val wasBackwardSwipe = curlDirection == CurlDirection.BACKWARD
+
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
                         // For forward swipe reset: move curl past right edge to flatten
@@ -497,6 +500,7 @@ class SwipeableCardsState(
                     }
                     CurlDirection.BACKWARD -> {
                         // For backward swipe reset: move curl back to left edge (fold it back)
+                        // Keep isBackwardSwipe=true during animation so curl stays on previous page
                         val targetAxis = CurlAxis(
                             origin = Offset(0f, curlAxis.origin.y),
                             direction = Offset(1f, 0f),
@@ -506,13 +510,12 @@ class SwipeableCardsState(
                         Log.d(TAG, "🔄 BACKWARD RESET: moving curl from distance=${curlAxis.distance} to 0 (fold back)")
                         curlAxisAnimatable.animateTo(
                             targetValue = targetAxis,
-                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                            animationSpec = spring(dampingRatio = 0.8f, stiffness = 600f)  // Faster animation
                         ) {
                             curlAxis = this.value
                             curlDragCurrent = dragStartAnimatable.value
                             curlDragStart = dragStartAnimatable.value
                         }
-                        isBackwardSwipe = false
                     }
                     null -> {
                         // No direction determined - just clear everything
@@ -531,6 +534,12 @@ class SwipeableCardsState(
                 verticalDrag = 0f
                 curlState = CurlState.Idle
                 curlDirection = null
+
+                // For backward reset, hide previous page only after ALL state is reset
+                // This prevents glitching on the current card during recomposition
+                if (wasBackwardSwipe) {
+                    isBackwardSwipe = false
+                }
             }
 
             else -> { /* Idle or Dragging */ }
