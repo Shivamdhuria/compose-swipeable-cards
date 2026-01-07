@@ -38,6 +38,7 @@ object PageCurlShader {
      * - iMouse: Current drag position in pixels
      * - iMouseClick: Initial click/touch position in pixels
      * - radius: Curl cylinder radius (normalized, 0.1 = 10% of height)
+     * - showCurlAxis: Whether to show the curl axis for debugging (1.0 = true, 0.0 = false)
      */
     private const val SHADER_SRC = """
         uniform shader iChannel0;   // Current page content
@@ -45,6 +46,7 @@ object PageCurlShader {
         uniform vec2 iMouse;        // Current drag position (xy)
         uniform vec2 iMouseClick;   // Initial click position (zw in ShaderToy)
         uniform float radius;
+        uniform float showCurlAxis; // 1.0 to show axis, 0.0 to hide
 
         const float PI = 3.14159265359;
 
@@ -179,6 +181,16 @@ object PageCurlShader {
                     color.rgb *= 1.0 - shadowStrength;
                 }
 
+                // Draw curl axis for debugging
+                if (showCurlAxis > 0.5) {
+                    float distToAxis = abs(dist);
+                    float axisThickness = 0.003; // Line thickness in normalized coords
+                    if (distToAxis < axisThickness) {
+                        // Red line along the curl axis
+                        return vec4(1.0, 0.0, 0.0, 1.0);
+                    }
+                }
+
                 return color;
             }
         }
@@ -222,5 +234,13 @@ object PageCurlShader {
      */
     fun RuntimeShader.setRadius(radius: Float) {
         setFloatUniform("radius", radius)
+    }
+
+    /**
+     * Helper to set whether to show the curl axis
+     * @param show true to show the axis, false to hide it
+     */
+    fun RuntimeShader.setShowCurlAxis(show: Boolean) {
+        setFloatUniform("showCurlAxis", if (show) 1.0f else 0.0f)
     }
 }

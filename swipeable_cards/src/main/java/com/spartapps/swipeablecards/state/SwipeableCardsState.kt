@@ -230,7 +230,8 @@ class SwipeableCardsState(
         curlState = CurlState.Dragging
         curlDirection = null
         horizontalDrag = 0f
-        val startPos = Offset(containerWidth, startOffset.y)
+        // Use actual touch position for asymmetric curl effect
+        val startPos = startOffset
         dragStartAnimatable.snapTo(startPos)
         dragCurrentAnimatable.snapTo(startPos)
         curlDragStart = startPos
@@ -274,30 +275,25 @@ class SwipeableCardsState(
 
         when (curlDirection) {
             CurlDirection.FORWARD -> {
-                // Forward curl: start from right edge, move left
-                val curlX = (containerWidth + horizontalDrag).coerceIn(0f, containerWidth)
+                // Forward curl: start from actual touch position, move left
+                val curlX = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth)
                 val newPos = Offset(
                     x = curlX,
-                    y = dragStartAnimatable.value.y + dragAmount.y * 0.2f
+                    y = dragStartAnimatable.value.y + dragAmount.y
                 )
                 dragCurrentAnimatable.snapTo(newPos)
                 curlDragCurrent = newPos
             }
             CurlDirection.BACKWARD -> {
-                // Backward curl: REVERSE positions so curl decreases as drag increases
-                // dragStart = right edge (fixed), dragCurrent = left→right (moving)
-                // As dragCurrent approaches dragStart, distance shrinks → uncurl effect
-                val uncurlX = horizontalDrag.coerceIn(0f, containerWidth)
-                val startPos = Offset(containerWidth, dragStartAnimatable.value.y)  // RIGHT edge (fixed)
+                // Backward curl: start from touch position, drag current follows finger
+                val uncurlX = (dragStartAnimatable.value.x + horizontalDrag).coerceIn(0f, containerWidth)
                 val newPos = Offset(
-                    x = uncurlX,  // LEFT→RIGHT (0→containerWidth)
-                    y = startPos.y + dragAmount.y * 0.2f
+                    x = uncurlX,
+                    y = dragStartAnimatable.value.y + dragAmount.y
                 )
-                dragStartAnimatable.snapTo(startPos)
                 dragCurrentAnimatable.snapTo(newPos)
-                curlDragStart = startPos
                 curlDragCurrent = newPos
-                Log.d(TAG, "🔙 BACKWARD DRAG - uncurlX=$uncurlX, dragStart=$startPos, dragCurrent=$newPos, distance=${startPos.x - newPos.x}")
+                Log.d(TAG, "🔙 BACKWARD DRAG - uncurlX=$uncurlX, dragStart=${dragStartAnimatable.value}, dragCurrent=$newPos")
             }
             null -> {
                 // Direction not yet determined or blocked
@@ -368,9 +364,9 @@ class SwipeableCardsState(
             CurlState.Completing -> {
                 when (curlDirection) {
                     CurlDirection.FORWARD -> {
-                        // Animate to fully curled (left edge) and beyond to create off-screen effect
+                        // Animate to fully curled - move beyond left edge based on curl origin
                         dragCurrentAnimatable.animateTo(
-                            targetValue = Offset(-containerWidth * 0.15f, dragCurrentAnimatable.value.y),
+                            targetValue = Offset(-containerWidth * 0.2f, dragCurrentAnimatable.value.y),
                             animationSpec = spring(dampingRatio = 0.7f, stiffness = 250f)
                         ) {
                             curlDragCurrent = this.value
@@ -378,12 +374,11 @@ class SwipeableCardsState(
                         onSwipeLeft()
                     }
                     CurlDirection.BACKWARD -> {
-                        // Animate to fully uncurled (right edge)
+                        // Animate to fully uncurled - move beyond right edge
                         dragCurrentAnimatable.animateTo(
-                            targetValue = Offset(containerWidth, dragCurrentAnimatable.value.y),
+                            targetValue = Offset(containerWidth * 1.2f, dragCurrentAnimatable.value.y),
                             animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f)
                         ) {
-                            curlDragStart = dragStartAnimatable.value
                             curlDragCurrent = this.value
                         }
                         onSwipeRight()

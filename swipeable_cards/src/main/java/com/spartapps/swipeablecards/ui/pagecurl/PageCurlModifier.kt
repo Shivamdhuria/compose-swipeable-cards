@@ -29,6 +29,7 @@ internal fun Modifier.drawPageCurl(
         shader.setMouse(dragCurrent.x, dragCurrent.y)
         shader.setMouseClick(dragStart.x, dragStart.y)
         shader.setRadius(config.curlRadius)
+        shader.setShowCurlAxis(config.showCurlAxis)
     }
 
     renderEffect = RenderEffect
