@@ -368,27 +368,33 @@ class SwipeableCardsState(
         onSwipeLeft: () -> Unit,
         onSwipeRight: () -> Unit
     ) {
+        Log.d(TAG, "🛑 DRAG END - direction=$curlDirection, horizontalDrag=$horizontalDrag, threshold=$thresholdPx, curlAxis=$curlAxis")
         when (curlDirection) {
             CurlDirection.FORWARD -> {
                 val draggedLeft = horizontalDrag < -thresholdPx
                 if (draggedLeft) {
+                    Log.d(TAG, "✅ Threshold crossed - COMPLETING")
                     curlState = CurlState.Completing
                     // Will call onSwipeLeft after animation
                 } else {
+                    Log.d(TAG, "❌ Threshold NOT crossed - RESETTING")
                     curlState = CurlState.Resetting
                 }
             }
             CurlDirection.BACKWARD -> {
                 val draggedRight = horizontalDrag > thresholdPx
                 if (draggedRight) {
+                    Log.d(TAG, "✅ Threshold crossed - COMPLETING")
                     curlState = CurlState.Completing
                     // Will call onSwipeRight after animation
                 } else {
+                    Log.d(TAG, "❌ Threshold NOT crossed - RESETTING")
                     curlState = CurlState.Resetting
                     isBackwardSwipe = false
                 }
             }
             null -> {
+                Log.d(TAG, "⚠️ No direction detected - RESETTING")
                 curlState = CurlState.Resetting
             }
         }
@@ -467,16 +473,50 @@ class SwipeableCardsState(
             }
 
             CurlState.Resetting -> {
-                // Animate curl axis back to zero (no curl)
-                curlAxisAnimatable.animateTo(
-                    targetValue = CurlAxis.ZERO,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
-                ) {
-                    curlAxis = this.value
-                    // Also update old drag positions for backward compatibility
-                    curlDragCurrent = dragStartAnimatable.value
-                    if (isBackwardSwipe) {
-                        curlDragStart = dragStartAnimatable.value
+                Log.d(TAG, "🔄 RESETTING - curlDirection=$curlDirection, currentAxis=$curlAxis, horizontalDrag=$horizontalDrag")
+
+                when (curlDirection) {
+                    CurlDirection.FORWARD -> {
+                        // For forward swipe reset: move curl past right edge to flatten
+                        // Origin stays at left edge, but distance moves beyond page width
+                        val aspect = containerWidth / containerHeight
+                        val targetAxis = CurlAxis(
+                            origin = Offset(0f, curlAxis.origin.y),
+                            direction = Offset(1f, 0f),  // Keep horizontal
+                            distance = aspect * 1.5f  // Move curl way past right edge
+                        )
+
+                        Log.d(TAG, "🔄 FORWARD RESET: moving curl from distance=${curlAxis.distance} to ${aspect * 1.5f} (off-screen)")
+                        curlAxisAnimatable.animateTo(
+                            targetValue = targetAxis,
+                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                        ) {
+                            curlAxis = this.value
+                            curlDragCurrent = dragStartAnimatable.value
+                        }
+                    }
+                    CurlDirection.BACKWARD -> {
+                        // For backward swipe reset: move curl back to left edge (fold it back)
+                        val targetAxis = CurlAxis(
+                            origin = Offset(0f, curlAxis.origin.y),
+                            direction = Offset(1f, 0f),
+                            distance = 0f  // Move to left edge to hide previous page
+                        )
+
+                        Log.d(TAG, "🔄 BACKWARD RESET: moving curl from distance=${curlAxis.distance} to 0 (fold back)")
+                        curlAxisAnimatable.animateTo(
+                            targetValue = targetAxis,
+                            animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f)
+                        ) {
+                            curlAxis = this.value
+                            curlDragCurrent = dragStartAnimatable.value
+                            curlDragStart = dragStartAnimatable.value
+                        }
+                        isBackwardSwipe = false
+                    }
+                    null -> {
+                        // No direction determined - just clear everything
+                        curlAxis = CurlAxis.ZERO
                     }
                 }
 

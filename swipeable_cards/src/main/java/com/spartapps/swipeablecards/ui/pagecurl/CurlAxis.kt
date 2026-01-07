@@ -29,11 +29,16 @@ internal data class CurlAxis(
         /**
          * Vector converter for use with Compose Animatable.
          * Converts between CurlAxis and a 4D animation vector.
-         * Direction is stored as an angle (radians).
+         * Direction is stored as angle + magnitude to handle zero vectors.
          */
         val VectorConverter = TwoWayConverter<CurlAxis, AnimationVector4D>(
             convertToVector = { axis ->
-                val angle = atan2(axis.direction.y, axis.direction.x)
+                val magnitude = sqrt(axis.direction.x * axis.direction.x + axis.direction.y * axis.direction.y)
+                val angle = if (magnitude > 0.001f) {
+                    atan2(axis.direction.y, axis.direction.x)
+                } else {
+                    0f  // Zero vector - angle doesn't matter
+                }
                 AnimationVector4D(
                     axis.origin.x,
                     axis.origin.y,
@@ -42,7 +47,13 @@ internal data class CurlAxis(
                 )
             },
             convertFromVector = { vector ->
-                val direction = Offset(cos(vector.v3), sin(vector.v3))
+                // Check if this is effectively a zero axis (distance near zero)
+                val isZero = vector.v4 < 0.001f
+                val direction = if (isZero) {
+                    Offset.Zero  // Return true zero for flat pages
+                } else {
+                    Offset(cos(vector.v3), sin(vector.v3))
+                }
                 CurlAxis(
                     origin = Offset(vector.v1, vector.v2),
                     direction = direction,
